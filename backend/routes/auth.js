@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
+const { authLimiter, loginLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ const validate = (req, res, next) => {
 };
 
 // POST /auth/signup
-router.post('/signup', [
+router.post('/signup', authLimiter, [
   body('email')
     .isEmail()
     .withMessage('Please provide a valid email')
@@ -60,7 +61,7 @@ router.post('/signup', [
 });
 
 // POST /auth/login
-router.post('/login', [
+router.post('/login', loginLimiter, [
   body('email')
     .isEmail()
     .withMessage('Please provide a valid email')
@@ -72,17 +73,46 @@ router.post('/login', [
   try {
     const { email, password } = req.body;
 
-    // Find user
+    // Find user and check if account is locked
     const user = await User.findOne({ email });
     if (!user) {
+      // Don't reveal if user exists or not (security best practice)
       return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // Check if account is locked
+    if (user.isLocked) {
+      const lockTimeRemaining = Math.ceil((user.lockUntil - Date.now()) / 1000 / 60);
+      return res.status(423).json({ 
+        message: `Account is temporarily locked due to too many failed login attempts. Please try again in ${lockTimeRemaining} minute(s).`,
+        lockUntil: user.lockUntil
+      });
     }
 
     // Check password
     const isMatch = await user.comparePassword(password);
+    
     if (!isMatch) {
+      // Increment login attempts
+      await user.incLoginAttempts();
+      
+      // Reload user to get updated state with virtuals
+      const updatedUser = await User.findById(user._id);
+      const isLocked = !!(updatedUser.lockUntil && updatedUser.lockUntil > Date.now());
+      
+      if (isLocked) {
+        const lockTimeRemaining = Math.ceil((updatedUser.lockUntil - Date.now()) / 1000 / 60);
+        return res.status(423).json({ 
+          message: `Account has been locked due to too many failed login attempts. Please try again in ${lockTimeRemaining} minute(s).`,
+          lockUntil: updatedUser.lockUntil
+        });
+      }
+      
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    // Successful login - reset login attempts
+    await user.resetLoginAttempts();
 
     // Generate token
     const token = generateToken(user._id);

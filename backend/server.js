@@ -1,16 +1,25 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const helmet = require('helmet');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
+const { generalLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 
-// Middleware
+// Security middleware
+app.use(helmet()); // Set various HTTP headers for security
 app.use(cors());
-app.use(express.json());
+
+// Body parser with size limit to prevent DoS attacks
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Apply general rate limiting to all routes
+app.use(generalLimiter);
 
 // Routes
 app.use('/auth', authRoutes);
