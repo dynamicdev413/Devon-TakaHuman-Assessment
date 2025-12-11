@@ -134,6 +134,98 @@ describe('Auth Endpoints', () => {
       expect(response.status).toBe(401);
       expect(response.body.message).toContain('Invalid credentials');
     });
+
+    it('should track failed login attempts', async () => {
+      // Make 3 failed login attempts
+      for (let i = 0; i < 3; i++) {
+        await request(app)
+          .post('/auth/login')
+          .send({
+            email: 'test@example.com',
+            password: 'wrongpassword'
+          });
+        // Small delay to ensure each request completes
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      // Wait a bit to ensure all saves are complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const user = await User.findOne({ email: 'test@example.com' });
+      expect(user.loginAttempts).toBe(3);
+    });
+
+    it('should lock account after 5 failed login attempts', async () => {
+      // Make 5 failed login attempts
+      for (let i = 0; i < 5; i++) {
+        await request(app)
+          .post('/auth/login')
+          .send({
+            email: 'test@example.com',
+            password: 'wrongpassword'
+          });
+      }
+
+      // Refresh user from database to get updated state
+      const user = await User.findOne({ email: 'test@example.com' });
+      // Check if locked using the virtual property
+      const isLocked = !!(user.lockUntil && user.lockUntil > Date.now());
+      expect(isLocked).toBe(true);
+      expect(user.lockUntil).toBeDefined();
+      expect(user.loginAttempts).toBeGreaterThanOrEqual(5);
+    });
+
+    it('should reject login when account is locked', async () => {
+      // Lock the account first
+      const user = await User.findOne({ email: 'test@example.com' });
+      user.loginAttempts = 5;
+      user.lockUntil = Date.now() + 30 * 60 * 1000; // 30 minutes from now
+      await user.save();
+
+      // Wait a bit to ensure the save is complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const response = await request(app)
+        .post('/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'password123'
+        });
+
+      expect(response.status).toBe(423);
+      expect(response.body.message).toContain('locked');
+    });
+
+    it('should reset login attempts on successful login', async () => {
+      // Make 2 failed attempts first
+      await request(app)
+        .post('/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'wrongpassword'
+        });
+
+      // Wait a bit to ensure the save is complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      let user = await User.findOne({ email: 'test@example.com' });
+      expect(user.loginAttempts).toBeGreaterThan(0);
+
+      // Successful login
+      await request(app)
+        .post('/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'password123'
+        });
+
+      // Wait a bit to ensure the save is complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      user = await User.findOne({ email: 'test@example.com' });
+      expect(user.loginAttempts).toBe(0);
+      expect(user.lockUntil).toBeUndefined();
+    });
   });
 });
 
