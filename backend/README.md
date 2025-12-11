@@ -10,6 +10,10 @@ A RESTful API backend for a Notes application built with Node.js, Express, Mongo
 - Request validation
 - Error handling
 - MongoDB database integration
+- **Rate limiting** to protect against brute force attacks
+- **Login attempt tracking** and **account lockout** mechanism
+- **Security headers** via Helmet.js
+- Request size limiting to prevent DoS attacks
 
 ## Prerequisites
 
@@ -180,10 +184,12 @@ backend/
 │   ├── auth.js          # Authentication routes
 │   └── notes.js         # Notes routes
 ├── middleware/
-│   └── auth.js          # JWT authentication middleware
+│   ├── auth.js          # JWT authentication middleware
+│   └── rateLimiter.js  # Rate limiting middleware
 ├── tests/
 │   ├── auth.test.js     # Authentication tests
-│   └── notes.test.js    # Notes tests
+│   ├── notes.test.js    # Notes tests
+│   └── security.test.js # Security features tests
 ├── server.js            # Express app setup
 ├── package.json
 └── README.md
@@ -191,10 +197,19 @@ backend/
 
 ## Security Features
 
-- Passwords are hashed using bcrypt before storage
-- JWT tokens expire after 7 days
-- Input validation on all endpoints
-- User-specific note access (users can only access their own notes)
+- **Password Security**: Passwords are hashed using bcrypt before storage
+- **JWT Tokens**: Tokens expire after 7 days
+- **Input Validation**: All endpoints have request validation
+- **User Isolation**: Users can only access their own notes
+- **Rate Limiting**: 
+  - General API: 100 requests per 15 minutes per IP
+  - Authentication endpoints: 5 requests per 15 minutes per IP
+  - Login endpoint: 5 attempts per 15 minutes per IP
+- **Login Attempt Tracking**: Failed login attempts are tracked per user
+- **Account Lockout**: Accounts are automatically locked after 5 failed login attempts for 30 minutes
+- **Security Headers**: Helmet.js provides various HTTP security headers
+- **Request Size Limiting**: 10MB limit to prevent DoS attacks
+- **CORS**: Configured for cross-origin requests
 
 ## Error Handling
 
@@ -204,5 +219,7 @@ The API returns appropriate HTTP status codes:
 - `400` - Bad Request (validation errors)
 - `401` - Unauthorized
 - `404` - Not Found
+- `423` - Locked (Account locked due to too many failed login attempts)
+- `429` - Too Many Requests (Rate limit exceeded)
 - `500` - Internal Server Error
 

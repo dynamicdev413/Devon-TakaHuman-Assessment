@@ -81,6 +81,8 @@ The frontend will run on `http://localhost:3000`
 -  MongoDB database integration
 -  Request validation
 -  Error handling
+-  **Rate limiting** and **account lockout** mechanisms
+-  **Security headers** and **DoS protection**
 -  Unit tests
 
 ### Frontend
@@ -170,12 +172,17 @@ npm test
 
 ## Security Features
 
-- Passwords are hashed using bcrypt before storage
-- JWT tokens with expiration (7 days)
-- Input validation on all endpoints
-- User-specific data access (users can only access their own notes)
-- CORS configuration
-- Environment variables for sensitive data
+- **Password Security**: Passwords are hashed using bcrypt before storage
+- **JWT Tokens**: Tokens expire after 7 days
+- **Input Validation**: All endpoints have request validation
+- **User Isolation**: Users can only access their own notes
+- **Rate Limiting**: Multi-tier rate limiting (general API, auth endpoints, login)
+- **Login Attempt Tracking**: Failed attempts are tracked per user
+- **Account Lockout**: Automatic lockout after 5 failed attempts (30 min duration)
+- **Security Headers**: Helmet.js provides HTTP security headers
+- **Request Size Limiting**: 10MB limit to prevent DoS attacks
+- **CORS**: Configured for cross-origin requests
+- **Environment Variables**: Sensitive data stored in environment variables
 
 ## Development
 
